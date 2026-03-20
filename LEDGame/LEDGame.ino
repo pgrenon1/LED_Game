@@ -123,9 +123,10 @@ void movePulses() {
 void fadeBackground() {
   for (int i = 0; i < NUM_LEDS; i++) {
     leds[i].fadeToBlackBy(10);
+    // Faint pink background tint
     if (leds[i].r < BACKGROUND_BRIGHTNESS) leds[i].r = BACKGROUND_BRIGHTNESS;
-    if (leds[i].g < BACKGROUND_BRIGHTNESS) leds[i].g = BACKGROUND_BRIGHTNESS;
-    if (leds[i].b < BACKGROUND_BRIGHTNESS) leds[i].b = BACKGROUND_BRIGHTNESS;
+    if (leds[i].g < 0) leds[i].g = 0; 
+    if (leds[i].b < BACKGROUND_BRIGHTNESS / 2) leds[i].b = BACKGROUND_BRIGHTNESS / 2;
   }
 }
 
@@ -160,22 +161,22 @@ void checkCollision() {
 void drawScene() {
   uint8_t glow = beatsin8(GOAL_PULSE_SPEED, GOAL_PULSE_MIN, 255);
   for (int i = goalStart; i <= goalEnd; i++) {
-    leds[i] = CHSV(40, 255, glow);
+    leds[i] = CHSV(235, 200, glow); // Cupid Pink Goal
   }
 
   uint8_t edgePulseLeft = beatsin8(EDGE_LEFT_PULSE_SPEED, EDGE_LEFT_PULSE_MIN, 255);
   uint8_t edgePulseRight = beatsin8(EDGE_RIGHT_PULSE_SPEED, EDGE_RIGHT_PULSE_MIN, 255);
 
   if (!leftActive)
-    leds[0] = CRGB(edgePulseLeft, edgePulseLeft, edgePulseLeft);
+    leds[0] = CRGB(edgePulseLeft, 0, edgePulseLeft / 2); // Soft Rose Edge
 
   if (!rightActive)
-    leds[NUM_LEDS - 1] = CRGB(edgePulseRight, edgePulseRight, edgePulseRight);
+    leds[NUM_LEDS - 1] = CRGB(edgePulseRight, 0, edgePulseRightpi / 2); // Soft Rose Edge
 
   if (leftActive && leftPos >= 0 && leftPos < NUM_LEDS)
-    leds[leftPos] = CRGB::White;
+    leds[leftPos] = CRGB::White; // "Arrow" Pulse
   if (rightActive && rightPos >= 0 && rightPos < NUM_LEDS)
-    leds[rightPos] = CRGB::White;
+    leds[rightPos] = CRGB::White; // "Arrow" Pulse
 }
 
 // --------------------------------------------------
@@ -214,7 +215,7 @@ void winAnimation1() {
     uint8_t brightness = (uint8_t)(255.0 * sin(phase * 3.14159)); // smooth bump
 
     // Apply to entire strip
-    fill_solid(leds, NUM_LEDS, CRGB(0, brightness, 0));
+    fill_solid(leds, NUM_LEDS, CRGB(brightness, 0, brightness / 2));
     FastLED.show();
     delay(delayTime);
   }
@@ -232,8 +233,8 @@ void winAnimation2() {
   // 0 → 255
   for (int i = 0; i <= frames1; i++) {
     float phase = (float)i / frames1;
-    uint8_t brightness = (uint8_t)(255.0 * phase); // linear rise
-    fill_solid(leds, NUM_LEDS, CRGB(0, brightness, 0));
+    uint8_t b = (uint8_t)(255.0 * phase); // linear rise
+    fill_solid(leds, NUM_LEDS, CRGB(b, 0, b / 2));
     FastLED.show();
     delay(delayTime);
   }
@@ -241,8 +242,8 @@ void winAnimation2() {
   // 255 → 196
   for (int i = 0; i <= frames2; i++) {
     float phase = (float)i / frames2;
-    uint8_t brightness = 255 - (uint8_t)((255 - midBrightness) * phase);
-    fill_solid(leds, NUM_LEDS, CRGB(0, brightness, 0));
+    uint8_t b = 255 - (uint8_t)((255 - midBrightness) * phase);
+    fill_solid(leds, NUM_LEDS, CRGB(b, 0, b / 2));
     FastLED.show();
     delay(delayTime);
   }
@@ -250,8 +251,8 @@ void winAnimation2() {
   // 196 → 255
   for (int i = 0; i <= frames3; i++) {
     float phase = (float)i / frames3;
-    uint8_t brightness = midBrightness + (uint8_t)((255 - midBrightness) * phase);
-    fill_solid(leds, NUM_LEDS, CRGB(0, brightness, 0));
+    uint8_t b = midBrightness + (uint8_t)((255 - midBrightness) * phase);
+    fill_solid(leds, NUM_LEDS, CRGB(b, 0, b / 2));
     FastLED.show();
     delay(delayTime);
   }
@@ -259,8 +260,8 @@ void winAnimation2() {
   // 255 → 0
   for (int i = 0; i <= frames4; i++) {
     float phase = (float)i / frames4;
-    uint8_t brightness = 255 - (uint8_t)(255 * phase);
-    fill_solid(leds, NUM_LEDS, CRGB(0, brightness, 0));
+    uint8_t b = 255 - (uint8_t)(255 * phase);
+    fill_solid(leds, NUM_LEDS, CRGB(b, 0, b / 2));
     FastLED.show();
     delay(delayTime);
   }
@@ -269,8 +270,9 @@ void winAnimation2() {
 // Smooth pulsing lose animation (fully red, slower hard pulse)
 void loseAnimation() {
   for (int i = 0; i < 16; i++) {
-    uint8_t brightness = (i % 4 < 2) ? 255 : 50; // slower flicker
-    fill_solid(leds, NUM_LEDS, CRGB(brightness, 0, 0));
+    uint8_t b = (i % 4 < 2) ? 255 : 50; // slower flicker
+    CRGB color = (i % 2 == 0) ? CRGB(b, 0, 0) : CRGB(b / 2, 0, b); // Red and Purple
+    fill_solid(leds, NUM_LEDS, color);
     FastLED.show();
     delay(40);
   }
