@@ -10,8 +10,8 @@
 #define BRIGHTNESS  255
 #define BACKGROUND_BRIGHTNESS 2
 
-#define GOAL_PULSE_SPEED 28
-#define GOAL_PULSE_MIN 100
+#define INITIAL_GOAL_PULSE_SPEED 28
+#define GOAL_PULSE_MIN 70
 #define EDGE_LEFT_PULSE_SPEED 30
 #define EDGE_LEFT_PULSE_MIN 100
 #define EDGE_RIGHT_PULSE_SPEED 32
@@ -32,6 +32,7 @@ bool rightActive = false;
 int goalStart = 0;
 int goalEnd = 0;
 int currentGoalSize = INITIAL_GOAL_SIZE;
+int currentGoalPulseSpeed = INITIAL_GOAL_PULSE_SPEED;
 
 // Game state
 int failCount = 0;
@@ -57,6 +58,7 @@ void setup() {
 
   randomSeed(analogRead(A0));
   currentGoalSize = INITIAL_GOAL_SIZE;
+  currentGoalPulseSpeed = INITIAL_GOAL_PULSE_SPEED;
   generateLevel(); // sets initial goal
 }
 
@@ -141,6 +143,7 @@ void checkCollision() {
     // Decrease goal size for next round, min size 1
     if (currentGoalSize > 1) {
       currentGoalSize--;
+      currentGoalPulseSpeed += 16; // Speed up the breathing animation more significantly
     }
     
     generateLevel();   // NEW: create a new goal after winning
@@ -157,6 +160,7 @@ void checkCollision() {
       // Long red lose animation + goal change
       loseAnimation();
       currentGoalSize = INITIAL_GOAL_SIZE; // Reset on game over
+      currentGoalPulseSpeed = INITIAL_GOAL_PULSE_SPEED;
       generateLevel();
     }
 
@@ -167,7 +171,7 @@ void checkCollision() {
 // --------------------------------------------------
 
 void drawScene() {
-  uint8_t glow = beatsin8(GOAL_PULSE_SPEED, GOAL_PULSE_MIN, 255);
+  uint8_t glow = beatsin8(currentGoalPulseSpeed, GOAL_PULSE_MIN, 255);
   for (int i = goalStart; i <= goalEnd; i++) {
     leds[i] = CHSV(40, 255, glow);
   }
