@@ -17,7 +17,7 @@
 #define EDGE_RIGHT_PULSE_SPEED 32
 #define EDGE_RIGHT_PULSE_MIN 100
 
-#define GOAL_SIZE   8
+#define INITIAL_GOAL_SIZE 8
 #define MAX_FAILS   3
 
 CRGB leds[NUM_LEDS];
@@ -31,6 +31,7 @@ bool rightActive = false;
 // Goal (static, only changes on 3 fails)
 int goalStart = 0;
 int goalEnd = 0;
+int currentGoalSize = INITIAL_GOAL_SIZE;
 
 // Game state
 int failCount = 0;
@@ -55,6 +56,7 @@ void setup() {
   pinMode(BTN_RIGHT, INPUT_PULLUP);
 
   randomSeed(analogRead(A0));
+  currentGoalSize = INITIAL_GOAL_SIZE;
   generateLevel(); // sets initial goal
 }
 
@@ -73,8 +75,8 @@ void loop() {
 // --------------------------------------------------
 
 void generateLevel() {
-  goalStart = random(10, NUM_LEDS - GOAL_SIZE - 10);
-  goalEnd = goalStart + GOAL_SIZE;
+  goalStart = random(10, NUM_LEDS - currentGoalSize - 10);
+  goalEnd = goalStart + currentGoalSize;
   failCount = 0;
 }
 
@@ -135,6 +137,12 @@ void checkCollision() {
   if (leftPos >= goalStart && leftPos <= goalEnd) {
     failCount = 0;
     winAnimation2();
+    
+    // Decrease goal size for next round, min size 1
+    if (currentGoalSize > 1) {
+      currentGoalSize--;
+    }
+    
     generateLevel();   // NEW: create a new goal after winning
     resetPulses();
   } else {
@@ -148,6 +156,7 @@ void checkCollision() {
     } else {
       // Long red lose animation + goal change
       loseAnimation();
+      currentGoalSize = INITIAL_GOAL_SIZE; // Reset on game over
       generateLevel();
     }
 
