@@ -11,14 +11,14 @@
 #define BRIGHTNESS  255
 #define BACKGROUND_BRIGHTNESS 2
 
-#define GOAL_PULSE_SPEED 28
-#define GOAL_PULSE_MIN 100
+#define INITIAL_GOAL_PULSE_SPEED 28
+#define GOAL_PULSE_MIN 60
 #define EDGE_LEFT_PULSE_SPEED 30
 #define EDGE_LEFT_PULSE_MIN 100
 #define EDGE_RIGHT_PULSE_SPEED 32
 #define EDGE_RIGHT_PULSE_MIN 100
 
-#define GOAL_SIZE   8
+#define INITIAL_GOAL_SIZE 8
 #define MAX_FAILS   3
 
 // --- Global Variables ---
@@ -31,6 +31,8 @@ bool rightActive = false;
 
 int goalStart = 0;
 int goalEnd = 0;
+int currentGoalSize = INITIAL_GOAL_SIZE;
+int currentGoalPulseSpeed = INITIAL_GOAL_PULSE_SPEED;
 
 int failCount = 0;
 int score = 0;
@@ -70,7 +72,9 @@ void setup() {
   pinMode(BTN_RIGHT, INPUT_PULLUP);
 
   randomSeed(analogRead(A0));
-  generateLevel();
+  currentGoalSize = INITIAL_GOAL_SIZE;
+  currentGoalPulseSpeed = INITIAL_GOAL_PULSE_SPEED;
+  generateLevel(); // sets initial goal
 }
 
 void loop() {
@@ -86,8 +90,9 @@ void loop() {
 // --- Logic Functions ---
 
 void generateLevel() {
-  goalStart = random(10, NUM_LEDS - GOAL_SIZE - 10);
-  goalEnd = goalStart + GOAL_SIZE;
+  goalStart = random(10, NUM_LEDS - currentGoalSize - 10);
+  goalEnd = goalStart + currentGoalSize;
+  failCount = 0;
 }
 
 void resetPulses() {
@@ -198,14 +203,39 @@ void playerFails(int explosionCenter) {
 
 void checkCollision() {
   if (leftPos >= goalStart && leftPos <= goalEnd) {
-    playerWins();
+    failCount = 0;
+    winAnimation2();
+    
+    // Decrease goal size for next round, min size 1
+    if (currentGoalSize > 1) {
+      currentGoalSize--;
+      currentGoalPulseSpeed += 16; // Speed up the breathing animation more significantly
+    }
+    
+    generateLevel();   // NEW: create a new goal after winning
+    resetPulses();
   } else {
-    playerFails((leftPos + rightPos) / 2);
+    failCount++;
+    
+    if (failCount < MAX_FAILS) {
+      // Tiny red explosion (3 pixels wide, non-blocking)
+      redExplosionActive = true;
+      redExplosionCenter = (leftPos + rightPos) / 2;
+      redExplosionFrame = 0;
+    } else {
+      // Long red lose animation + goal change
+      loseAnimation();
+      currentGoalSize = INITIAL_GOAL_SIZE; // Reset on game over
+      currentGoalPulseSpeed = INITIAL_GOAL_PULSE_SPEED;
+      generateLevel();
+    }
+
+    resetPulses();
   }
 }
 
 void drawScene() {
-  uint8_t glow = beatsin8(GOAL_PULSE_SPEED, GOAL_PULSE_MIN, 255);
+  uint8_t glow = beatsin8(currentGoalPulseSpeed, GOAL_PULSE_MIN, 255);
   for (int i = goalStart; i <= goalEnd; i++) {
     leds[i] = CHSV(40, 255, glow);
   }
