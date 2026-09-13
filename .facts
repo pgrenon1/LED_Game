@@ -1,0 +1,31 @@
+# To enable agent verification of manual facts, uncomment and edit:
+# - label: facts configuration
+#   id: .config
+#   agent: claude
+#   batch-size: 10
+# Or run: facts config set agent claude
+
+# domain
+- a Dot is a white light launched from one end of the strip and moving toward the opposite end @spec
+- the Scoring Zone is a contiguous pulsing-yellow target region on the LED strip @spec
+- Progress is represented by successful collisions shrinking the Scoring Zone toward its configured minimum and increasing its pulse frequency, not by a numeric score @spec
+
+# gameplay
+
+## input-and-motion
+- pressing or holding either endpoint button launches a Dot from that end whenever that side has no active Dot @spec
+- a launched Dot remains white while moving and deactivates after leaving the opposite end @spec
+
+## collisions
+- two active Dots collide when their opposing paths meet or cross @spec
+- a collision succeeds when at least one pixel occupied or crossed by the Dots during the collision step lies inside the Scoring Zone @spec
+- a successful collision runs a whole-strip green animation and then removes both Dots @spec
+- a missed collision displays a three-pixel red marker centered on the collision for seven render frames and removes both Dots @spec
+
+## progression
+- a successful collision clears consecutive misses, reduces the Scoring Zone toward its configured minimum size, increases its pulse frequency, and randomly relocates it @spec
+- a missed collision increments the consecutive-miss count @spec
+- the third consecutive miss flashes the entire strip red, restores the Scoring Zone's configured initial size and pulse speed, randomly relocates it, and clears the miss count @spec
+
+## scoring-zone
+- the configured Scoring Zone size equals the number of yellow pixels it occupies @spec

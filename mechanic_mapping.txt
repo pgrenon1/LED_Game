@@ -1,0 +1,91 @@
+## Mechanic-to-code mapping
+
+| Game mechanic | Code correlate | Alignment |
+|---|---|---|
+| **Either button launches a dot from its end** | Pins use `INPUT_PULLUP` in `setup()` (`LEDGame.ino:68-69`). `handleInput()` activates the left dot at pixel `0` or the right dot at pixel `NUM_LEDS - 1` (`LEDGame.ino:119-128`). | Implemented. Input is level-triggered rather than edge-triggered, so holding a button can relaunch its dot once the previous dot becomes inactive. |
+| **Dots travel toward the opposite end** | `movePulses()` advances `leftPos++` and `rightPos--` every `pulseSpeed` milliseconds (`LEDGame.ino:130-142`). | Implemented. `pulseSpeed = 15` at `LEDGame.ino:40`; each dot deactivates after leaving the strip. |
+| **Two active dots collide** | Collision is detected when both dots are active and `leftPos >= rightPos` (`LEDGame.ino:137-139`). | Implemented, with an accuracy issue: the dots can cross between frames, but the zone test uses only `leftPos`, not the midpoint of the two positions. |
+| **Dots are visible while moving** | Active dots are rendered white in `drawScene()` (`LEDGame.ino:221-222`). | Implemented. |
+| **The scoring zone is highlighted yellow** | `goalStart`, `goalEnd`, and `currentGoalSize` hold zone state (`LEDGame.ino:32-35`). `generateLevel()` chooses its location (`LEDGame.ino:89-93`). `drawScene()` renders it with yellow-ish `CHSV(40, 255, glow)` (`LEDGame.ino:209-213`). | Implemented as a pulsing yellow zone. |
+| **A collision outside the zone creates red at the collision point** | The miss branch in `checkCollision()` starts `redExplosionActive` around `(leftPos + rightPos) / 2` (`LEDGame.ino:189-196`). `updateRedExplosion()` renders red pixels (`LEDGame.ino:225-233`). | Approximately implemented. It produces a **three-pixel red mark**, not one red dot, and lasts seven main-loop frames. |
+| **A collision inside the zone lights the whole strip green** | The success branch checks zone membership and calls `winAnimation2()` (`LEDGame.ino:176-179`). That animation repeatedly fills the entire strip green (`LEDGame.ino:235-254`). | Implemented. |
+| **A successful collision advances difficulty without a numeric score** | The success branch shrinks `currentGoalSize`, increases the zone pulse speed, generates a new zone, and resets both dots (`LEDGame.ino:176-188`). | Implemented as the canonical success path. The obsolete `score`, `playerWins()`, blue score display, and serial `"score"` command have been removed. |
+| **Success resets the consecutive-failure count** | The success branch assigns `failCount = 0` (`LEDGame.ino:177-179`), and `generateLevel()` also resets it (`LEDGame.ino:89-93`). | Implemented. |
+| **After success, the zone moves** | The success branch calls `generateLevel()` after shrinking the zone (`LEDGame.ino:181-188`). The function chooses a random `goalStart` (`LEDGame.ino:89-92`). | Implemented. |
+| **After success, the zone shrinks** | `currentGoalSize--` after a successful collision, down to a nominal minimum of `1` (`LEDGame.ino:181-185`). | Implemented, but there is an off-by-one error in the represented width. |
+| **Three consecutive misses flash the whole strip red** | Every missed collision increments `failCount` (`LEDGame.ino:189-190`). On the third miss, `loseAnimation()` is called (`LEDGame.ino:197-202`). It fills the whole strip red at alternating brightness (`LEDGame.ino:256-263`). | Implemented. |
+| **After three misses, progress resets** | The third-miss branch restores `currentGoalSize = INITIAL_GOAL_SIZE` and `currentGoalPulseSpeed = INITIAL_GOAL_PULSE_SPEED` (`LEDGame.ino:197-202`). | Implemented for zone size and pulse speed. There is no separate numeric score. |
+| **After reset, the zone moves randomly** | The third-miss branch calls `generateLevel()` (`LEDGame.ino:202`), which picks a new random location. | Implemented. |
+| **Dots reset after either collision outcome** | `resetPulses()` clears both active flags and positions (`LEDGame.ino:95-100`); both branches of `checkCollision()` invoke it (`LEDGame.ino:188,205`). | Implemented. |
+
+## Important divergences
+
+### 1. Zone size is off by one pixel
+
+Generation uses:
+
+```cpp
+goalEnd = goalStart + currentGoalSize;
+
+```
+
+Rendering and collision checking both use inclusive endpoints:
+
+```cpp
+for (int i = goalStart; i <= goalEnd; i++)
+
+```
+
+Therefore the visible width is:
+
+$$\text{goalEnd} - \text{goalStart} + 1 = \text{currentGoalSize} + 1$$
+
+With `INITIAL_GOAL_SIZE = 8`, the zone is actually **9 pixels wide**. When `currentGoalSize` reaches its minimum of `1`, the zone remains **2 pixels wide**.
+
+If `currentGoalSize` is intended to mean the number of pixels, `goalEnd` should be `goalStart + currentGoalSize - 1`.
+
+### 2. Zone membership uses one dot’s position rather than the collision center
+
+The zone-membership decision is:
+
+```cpp
+if (leftPos >= goalStart && leftPos <= goalEnd)
+
+```
+
+The visual miss location uses the more representative collision center:
+
+```cpp
+(leftPos + rightPos) / 2
+
+```
+
+Because both positions change before collision detection, adjacent dots can cross in one update. For example:
+
+```text
+Before movement: leftPos=44, rightPos=45
+After movement:  leftPos=45, rightPos=44
+
+```
+
+The geometric collision is between pixels 44 and 45, while the zone-membership decision uses pixel 45 only. At a zone boundary, this can change whether the collision is treated as a success.
+
+## Effective game-state model
+
+```mermaid
+stateDiagram-v2
+    [*] --> Waiting
+    Waiting --> OneDotMoving: one button pressed
+    Waiting --> TwoDotsMoving: both buttons pressed
+    OneDotMoving --> TwoDotsMoving: other button pressed
+    OneDotMoving --> Waiting: dot leaves strip
+    TwoDotsMoving --> Success: collision and leftPos inside zone
+    TwoDotsMoving --> Miss: collision outside zone
+    Success --> Waiting: green animation, shrink and relocate zone
+    Miss --> Waiting: failCount below 3, red collision mark
+    Miss --> Reset: third consecutive miss
+    Reset --> Waiting: red strip flash, restore and relocate zone
+
+```
+
+The obsolete numeric-score path has been removed. The remaining implementation divergences are the zone-width off-by-one and the collision-coordinate boundary behavior described above.
