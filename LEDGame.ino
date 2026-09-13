@@ -11,52 +11,56 @@
 #define BRIGHTNESS  255
 #define BACKGROUND_BRIGHTNESS 2
 
-#define INITIAL_GOAL_PULSE_SPEED 28
-#define GOAL_PULSE_MIN 60
-#define EDGE_LEFT_PULSE_SPEED 30
-#define EDGE_LEFT_PULSE_MIN 100
-#define EDGE_RIGHT_PULSE_SPEED 32
-#define EDGE_RIGHT_PULSE_MIN 100
+#define INITIAL_TARGET_ZONE_BREATHING_RATE 28
+#define TARGET_ZONE_MIN_BRIGHTNESS 60
+#define LEFT_ENDPOINT_GLOW_RATE 30
+#define LEFT_ENDPOINT_MIN_BRIGHTNESS 100
+#define RIGHT_ENDPOINT_GLOW_RATE 32
+#define RIGHT_ENDPOINT_MIN_BRIGHTNESS 100
 
-#define INITIAL_GOAL_SIZE 8
-#define MAX_FAILS   3
+#define INITIAL_TARGET_ZONE_SIZE 8
+#define MIN_TARGET_ZONE_SIZE 1
+#define TARGET_ZONE_EDGE_MARGIN 10
+#define TARGET_ZONE_BREATHING_RATE_STEP 16
+#define MAX_MISS_STREAK 3
+#define PULSE_MOVE_INTERVAL_MS 15
+#define MISS_MARKER_DURATION_FRAMES 7
 
 // --- Global Variables ---
 CRGB leds[NUM_LEDS];
 
-int leftPos = -1;
-int rightPos = -1;
-bool leftActive = false;
-bool rightActive = false;
+int leftPulsePosition = -1;
+int rightPulsePosition = -1;
+bool leftPulseActive = false;
+bool rightPulseActive = false;
 
-int goalStart = 0;
-int goalEnd = 0;
-int currentGoalSize = INITIAL_GOAL_SIZE;
-int currentGoalPulseSpeed = INITIAL_GOAL_PULSE_SPEED;
+int targetZoneStart = 0;
+int targetZoneEnd = 0;
+int currentTargetZoneSize = INITIAL_TARGET_ZONE_SIZE;
+int currentTargetZoneBreathingRate = INITIAL_TARGET_ZONE_BREATHING_RATE;
 
-int failCount = 0;
+int missStreak = 0;
 
-unsigned long lastMoveTime = 0;
-int pulseSpeed = 15;
+unsigned long lastPulseMoveTime = 0;
 
-bool redExplosionActive = false;
-int redExplosionCenter = 0;
-int redExplosionFrame = 0;
-const int redExplosionSteps = 7;
+bool missMarkerActive = false;
+int missMarkerCenter = 0;
+int missMarkerFrame = 0;
 
 // --- Function Prototypes ---
-void generateLevel();
-void resetPulses();
-void playerFails(int explosionCenter);
+void relocateTargetZone();
+void removePulses();
+void handleMiss(int collisionSpanCenter);
+void handleHit();
 void handleSerial();
 void handleInput();
 void movePulses();
 void fadeBackground();
 void checkCollision();
 void drawScene();
-void updateRedExplosion();
-void winAnimation2();
-void loseAnimation();
+void updateMissMarker();
+void runHitAnimation();
+void runProgressResetAnimation();
 
 // --- Main Program ---
 
@@ -69,9 +73,7 @@ void setup() {
   pinMode(BTN_RIGHT, INPUT_PULLUP);
 
   randomSeed(analogRead(A0));
-  currentGoalSize = INITIAL_GOAL_SIZE;
-  currentGoalPulseSpeed = INITIAL_GOAL_PULSE_SPEED;
-  generateLevel(); // sets initial goal
+  relocateTargetZone();
 }
 
 void loop() {
@@ -79,24 +81,25 @@ void loop() {
   handleInput();
   movePulses();
   fadeBackground();
-  updateRedExplosion();
   drawScene();
+  updateMissMarker();
   FastLED.show();
 }
 
 // --- Logic Functions ---
 
-void generateLevel() {
-  goalStart = random(10, NUM_LEDS - currentGoalSize - 10);
-  goalEnd = goalStart + currentGoalSize;
-  failCount = 0;
+void relocateTargetZone() {
+  targetZoneStart = random(
+      TARGET_ZONE_EDGE_MARGIN,
+      NUM_LEDS - currentTargetZoneSize - TARGET_ZONE_EDGE_MARGIN + 1);
+  targetZoneEnd = targetZoneStart + currentTargetZoneSize - 1;
 }
 
-void resetPulses() {
-  leftActive = false;
-  rightActive = false;
-  leftPos = -1;
-  rightPos = -1;
+void removePulses() {
+  leftPulseActive = false;
+  rightPulseActive = false;
+  leftPulsePosition = -1;
+  rightPulsePosition = -1;
 }
 
 void handleSerial() {
@@ -105,9 +108,9 @@ void handleSerial() {
     char c = Serial.read();
     if (c == '\n') {
       inputBuffer.trim();
-      if (inputBuffer == "fail") {
-        Serial.println("ACK: fail");
-        playerFails(NUM_LEDS / 2);
+      if (inputBuffer == "miss") {
+        Serial.println("ACK: miss");
+        handleMiss(NUM_LEDS / 2);
       }
       inputBuffer = "";
     } else if (c != '\r') {
@@ -117,29 +120,29 @@ void handleSerial() {
 }
 
 void handleInput() {
-  if (!leftActive && digitalRead(BTN_LEFT) == LOW) {
-    leftActive = true;
-    leftPos = 0;
+  if (!leftPulseActive && digitalRead(BTN_LEFT) == LOW) {
+    leftPulseActive = true;
+    leftPulsePosition = 0;
   }
-  if (!rightActive && digitalRead(BTN_RIGHT) == LOW) {
-    rightActive = true;
-    rightPos = NUM_LEDS - 1;
+  if (!rightPulseActive && digitalRead(BTN_RIGHT) == LOW) {
+    rightPulseActive = true;
+    rightPulsePosition = NUM_LEDS - 1;
   }
 }
 
 void movePulses() {
-  if (millis() - lastMoveTime < pulseSpeed) return;
-  lastMoveTime = millis();
+  if (millis() - lastPulseMoveTime < PULSE_MOVE_INTERVAL_MS) return;
+  lastPulseMoveTime = millis();
 
-  if (leftActive) leftPos++;
-  if (rightActive) rightPos--;
+  if (leftPulseActive) leftPulsePosition++;
+  if (rightPulseActive) rightPulsePosition--;
 
-  if (leftActive && rightActive && leftPos >= rightPos) {
+  if (leftPulseActive && rightPulseActive && leftPulsePosition >= rightPulsePosition) {
     checkCollision();
   }
 
-  if (leftPos >= NUM_LEDS) leftActive = false;
-  if (rightPos < 0) rightActive = false;
+  if (leftPulsePosition >= NUM_LEDS) leftPulseActive = false;
+  if (rightPulsePosition < 0) rightPulseActive = false;
 }
 
 void fadeBackground() {
@@ -151,109 +154,116 @@ void fadeBackground() {
   }
 }
 
+void handleMiss(int collisionSpanCenter) {
+  missStreak++;
 
-void playerFails(int explosionCenter) {
-  failCount++;
-  
-  if (failCount < MAX_FAILS) {
-    Serial.print("Missed! Deaths: ");
-    Serial.print(failCount);
+  if (missStreak < MAX_MISS_STREAK) {
+    Serial.print("Miss Streak: ");
+    Serial.print(missStreak);
     Serial.print("/");
-    Serial.println(MAX_FAILS);
-    
-    redExplosionActive = true;
-    redExplosionCenter = explosionCenter;
-    redExplosionFrame = 0;
+    Serial.println(MAX_MISS_STREAK);
+
+    missMarkerActive = true;
+    missMarkerCenter = collisionSpanCenter;
+    missMarkerFrame = 0;
   } else {
-    Serial.println("GAME OVER! Resetting game.");
-    failCount = 0;
-    loseAnimation();
-    generateLevel();
+    Serial.println("Progress Reset.");
+    runProgressResetAnimation();
+    currentTargetZoneSize = INITIAL_TARGET_ZONE_SIZE;
+    currentTargetZoneBreathingRate = INITIAL_TARGET_ZONE_BREATHING_RATE;
+    missStreak = 0;
+    relocateTargetZone();
   }
-  resetPulses();
+
+  removePulses();
+}
+
+void handleHit() {
+  missStreak = 0;
+  runHitAnimation();
+
+  if (currentTargetZoneSize > MIN_TARGET_ZONE_SIZE) {
+    currentTargetZoneSize--;
+    currentTargetZoneBreathingRate += TARGET_ZONE_BREATHING_RATE_STEP;
+  }
+
+  relocateTargetZone();
+  removePulses();
 }
 
 void checkCollision() {
-  if (leftPos >= goalStart && leftPos <= goalEnd) {
-    failCount = 0;
-    winAnimation2();
-    
-    // Decrease goal size for next round, min size 1
-    if (currentGoalSize > 1) {
-      currentGoalSize--;
-      currentGoalPulseSpeed += 16; // Speed up the breathing animation more significantly
-    }
-    
-    generateLevel();   // NEW: create a new goal after winning
-    resetPulses();
-  } else {
-    failCount++;
-    
-    if (failCount < MAX_FAILS) {
-      // Tiny red explosion (3 pixels wide, non-blocking)
-      redExplosionActive = true;
-      redExplosionCenter = (leftPos + rightPos) / 2;
-      redExplosionFrame = 0;
-    } else {
-      // Long red lose animation + goal change
-      loseAnimation();
-      currentGoalSize = INITIAL_GOAL_SIZE; // Reset on game over
-      currentGoalPulseSpeed = INITIAL_GOAL_PULSE_SPEED;
-      generateLevel();
-    }
+  int collisionSpanStart =
+      leftPulsePosition < rightPulsePosition ? leftPulsePosition : rightPulsePosition;
+  int collisionSpanEnd =
+      leftPulsePosition > rightPulsePosition ? leftPulsePosition : rightPulsePosition;
 
-    resetPulses();
+  if (collisionSpanEnd >= targetZoneStart && collisionSpanStart <= targetZoneEnd) {
+    handleHit();
+  } else {
+    handleMiss((collisionSpanStart + collisionSpanEnd) / 2);
   }
 }
 
 void drawScene() {
-  uint8_t glow = beatsin8(currentGoalPulseSpeed, GOAL_PULSE_MIN, 255);
-  for (int i = goalStart; i <= goalEnd; i++) {
-    leds[i] = CHSV(40, 255, glow);
+  uint8_t targetZoneBrightness =
+      beatsin8(currentTargetZoneBreathingRate, TARGET_ZONE_MIN_BRIGHTNESS, 255);
+  for (int i = targetZoneStart; i <= targetZoneEnd; i++) {
+    leds[i] = CHSV(40, 255, targetZoneBrightness);
   }
 
-  uint8_t edgePulseLeft = beatsin8(EDGE_LEFT_PULSE_SPEED, EDGE_LEFT_PULSE_MIN, 255);
-  uint8_t edgePulseRight = beatsin8(EDGE_RIGHT_PULSE_SPEED, EDGE_RIGHT_PULSE_MIN, 255);
+  uint8_t leftEndpointBrightness =
+      beatsin8(LEFT_ENDPOINT_GLOW_RATE, LEFT_ENDPOINT_MIN_BRIGHTNESS, 255);
+  uint8_t rightEndpointBrightness =
+      beatsin8(RIGHT_ENDPOINT_GLOW_RATE, RIGHT_ENDPOINT_MIN_BRIGHTNESS, 255);
 
-  if (!leftActive) leds[0] = CRGB(edgePulseLeft, edgePulseLeft, edgePulseLeft);
-  if (!rightActive) leds[NUM_LEDS - 1] = CRGB(edgePulseRight, edgePulseRight, edgePulseRight);
-
-  if (leftActive && leftPos >= 0 && leftPos < NUM_LEDS) leds[leftPos] = CRGB::White;
-  if (rightActive && rightPos >= 0 && rightPos < NUM_LEDS) leds[rightPos] = CRGB::White;
-}
-
-void updateRedExplosion() {
-  if (!redExplosionActive) return;
-  for (int i = -1; i <= 1; i++) {
-    int pos = redExplosionCenter + i;
-    if (pos >= 0 && pos < NUM_LEDS) leds[pos] = CRGB::Red;
+  if (!leftPulseActive) {
+    leds[0] = CRGB(leftEndpointBrightness, leftEndpointBrightness, leftEndpointBrightness);
   }
-  redExplosionFrame++;
-  if (redExplosionFrame >= redExplosionSteps) redExplosionActive = false;
+  if (!rightPulseActive) {
+    leds[NUM_LEDS - 1] =
+        CRGB(rightEndpointBrightness, rightEndpointBrightness, rightEndpointBrightness);
+  }
+
+  if (leftPulseActive && leftPulsePosition >= 0 && leftPulsePosition < NUM_LEDS) {
+    leds[leftPulsePosition] = CRGB::White;
+  }
+  if (rightPulseActive && rightPulsePosition >= 0 && rightPulsePosition < NUM_LEDS) {
+    leds[rightPulsePosition] = CRGB::White;
+  }
 }
 
-void winAnimation2() {
-  const int delayTime = 20;
-  const int midBrightness = 64; 
+void updateMissMarker() {
+  if (!missMarkerActive) return;
+  for (int offset = -1; offset <= 1; offset++) {
+    int position = missMarkerCenter + offset;
+    if (position >= 0 && position < NUM_LEDS) leds[position] = CRGB::Red;
+  }
+  missMarkerFrame++;
+  if (missMarkerFrame >= MISS_MARKER_DURATION_FRAMES) missMarkerActive = false;
+}
+
+void runHitAnimation() {
+  const int frameDelayMs = 20;
+  const int midBrightness = 64;
   for (int i = 0; i <= 10; i++) {
     fill_solid(leds, NUM_LEDS, CRGB(0, (uint8_t)(255.0 * i / 10.0), 0));
-    FastLED.show(); delay(delayTime);
+    FastLED.show(); delay(frameDelayMs);
   }
   for (int i = 0; i <= 10; i++) {
     fill_solid(leds, NUM_LEDS, CRGB(0, 255 - (uint8_t)((255 - midBrightness) * i / 10.0), 0));
-    FastLED.show(); delay(delayTime);
+    FastLED.show(); delay(frameDelayMs);
   }
   for (int i = 0; i <= 15; i++) {
     fill_solid(leds, NUM_LEDS, CRGB(0, midBrightness + (uint8_t)((255 - midBrightness) * i / 15.0), 0));
-    FastLED.show(); delay(delayTime);
+    FastLED.show(); delay(frameDelayMs);
   }
   for (int i = 0; i <= 30; i++) {
     fill_solid(leds, NUM_LEDS, CRGB(0, 255 - (uint8_t)(255 * i / 30.0), 0));
-    FastLED.show(); delay(delayTime);
+    FastLED.show(); delay(frameDelayMs);
   }
 }
 
-void loseAnimation() {
+void runProgressResetAnimation() {
   for (int i = 0; i < 16; i++) {
     uint8_t brightness = (i % 4 < 2) ? 255 : 50;
     fill_solid(leds, NUM_LEDS, CRGB(brightness, 0, 0));

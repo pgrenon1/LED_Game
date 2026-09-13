@@ -6,26 +6,26 @@
 # Or run: facts config set agent claude
 
 # domain
-- a Dot is a white light launched from one end of the strip and moving toward the opposite end @spec
-- the Scoring Zone is a contiguous pulsing-yellow target region on the LED strip @spec
-- Progress is represented by successful collisions shrinking the Scoring Zone toward its configured minimum and increasing its pulse frequency, not by a numeric score @spec
+- a Pulse is a white light launched from one end of the LED strip and moving toward the opposite end @implemented
+- the Target Zone is a contiguous yellow region of the LED strip whose brightness follows a Breathing Cycle @implemented
+- Progress is represented by Hits shrinking the Target Zone toward its configured minimum and increasing its Breathing Rate, not by a numeric score @implemented
 
 # gameplay
 
 ## input-and-motion
-- pressing or holding either endpoint button launches a Dot from that end whenever that side has no active Dot @spec
-- a launched Dot remains white while moving and deactivates after leaving the opposite end @spec
+- pressing or holding either endpoint button launches a Pulse from that end whenever that side has no active Pulse @implemented
+- a launched Pulse remains white while moving and deactivates after leaving the opposite end @implemented
 
 ## collisions
-- two active Dots collide when their opposing paths meet or cross @spec
-- a collision succeeds when at least one pixel occupied or crossed by the Dots during the collision step lies inside the Scoring Zone @spec
-- a successful collision runs a whole-strip green animation and then removes both Dots @spec
-- a missed collision displays a three-pixel red marker centered on the collision for seven render frames and removes both Dots @spec
+- two active Pulses collide when their opposing paths meet or cross @implemented
+- a collision is a Hit exactly when its Collision Span overlaps the Target Zone @implemented
+- a Hit runs the whole-strip green Hit Animation and then removes both Pulses @implemented
+- a Miss that does not trigger a Progress Reset removes both Pulses and displays a three-pixel Miss Marker centered on the Collision Span for seven render frames @implemented
 
 ## progression
-- a successful collision clears consecutive misses, reduces the Scoring Zone toward its configured minimum size, increases its pulse frequency, and randomly relocates it @spec
-- a missed collision increments the consecutive-miss count @spec
-- the third consecutive miss flashes the entire strip red, restores the Scoring Zone's configured initial size and pulse speed, randomly relocates it, and clears the miss count @spec
+- a Hit clears the Miss Streak and randomly relocates the Target Zone; while above minimum size, it also shrinks the Target Zone and increases its Breathing Rate @implemented
+- a Miss increments the Miss Streak @implemented
+- the third consecutive Miss triggers a Progress Reset that flashes the entire strip red, restores the Target Zone's configured initial size and Breathing Rate, randomly relocates it, and clears the Miss Streak @implemented
 
-## scoring-zone
-- the configured Scoring Zone size equals the number of yellow pixels it occupies @spec
+## target-zone
+- the configured Target Zone size equals the number of yellow pixels it occupies @implemented
